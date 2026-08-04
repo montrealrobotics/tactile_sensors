@@ -67,6 +67,9 @@ function handleData(msg) {
 
 function initStaticChart(divId) {
     Plotly.newPlot(divId, [{
+        // Cell centers at i+0.5 so each sensor cell spans exactly one integer-to-integer unit (e.g. column 0 = [0,1])
+        x: [0.5, 1.5, 2.5, 3.5],
+        y: [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5],
         z: Array(7).fill(null).map(() => Array(4).fill(0)),
         type: 'heatmap',
         colorscale: TACTILE_COLORSCALE,
@@ -74,8 +77,8 @@ function initStaticChart(divId) {
         zmin: 0, zmax: 3000,
         colorbar: { title: 'Pressure', len: 0.9 }
     }], {
-        xaxis: { title: 'Column', dtick: 1 },
-        yaxis: { title: 'Row', dtick: 1, autorange: 'reversed' },
+        xaxis: { title: 'Column', dtick: 1, range: [0, 4] },
+        yaxis: { title: 'Row', dtick: 1, range: [7, 0], scaleanchor: 'x', scaleratio: 1, constrain: 'domain' },
         margin: COMPACT_MARGIN
     }, PLOTLY_CONFIG);
 }
