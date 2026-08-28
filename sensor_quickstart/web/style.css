@@ -119,12 +119,14 @@ header h1 {
 
 /* Static heatmap: match the sensor's 7 rows x 4 columns aspect ratio instead of a fixed height */
 #tab-static .chart-container {
-    flex: 0 1 320px;
-    max-width: 320px;
+    flex: 1 1 auto;
+    max-width: 450px;
+    margin: 0 auto;
 }
 
 #tab-static .chart-container > div {
     height: auto !important;
+    width: 100% !important;
     aspect-ratio: 4 / 7;
     max-height: calc(100vh - 210px);
 }
