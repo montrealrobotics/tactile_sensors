@@ -36,23 +36,27 @@ apply_udev_rule() {
       src_rule="${script_dir}/../udev/99-rq-tsf85.rules"
       dest_rule="/etc/udev/rules.d/99-rq-tsf85.rules"
 
-      if [[ ! -f "${src_rule}" ]]; then
-        echo "[ERROR] Missing source udev rule at ${src_rule}" >&2
-        exit 1
+      if [[ -f "${dest_rule}" ]]; then
+        echo "[INFO] udev rule already exists at ${dest_rule} — skipping installation."
+      else
+        if [[ ! -f "${src_rule}" ]]; then
+          echo "[ERROR] Missing source udev rule at ${src_rule}" >&2
+          exit 1
+        fi
+
+        echo "[INFO] Installing Robotiq TSF-85 udev rule (requires sudo)..."
+        sudo install -m 644 "${src_rule}" "${dest_rule}"
+
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger \
+          --attr-match=idVendor=16d0 \
+          --attr-match=idProduct=14cc
+        sudo udevadm trigger \
+          --attr-match=idVendor=04b4 \
+          --attr-match=idProduct=f232
+
+        echo "[INFO] udev rule installed at ${dest_rule}."
       fi
-
-      echo "[INFO] Installing Robotiq TSF-85 udev rule (requires sudo)..."
-      sudo install -m 644 "${src_rule}" "${dest_rule}"
-
-      sudo udevadm control --reload-rules
-      sudo udevadm trigger \
-        --attr-match=idVendor=16d0 \
-        --attr-match=idProduct=14cc
-      sudo udevadm trigger \
-        --attr-match=idVendor=04b4 \
-        --attr-match=idProduct=f232
-        
-      echo "[INFO] udev rule installed at ${dest_rule}."
   fi
 }
 
