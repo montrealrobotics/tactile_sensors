@@ -17,12 +17,20 @@ from collections import deque
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from functools import partial
 from pathlib import Path
+from typing import Optional
 
-import websockets
+try:
+    import websockets
+except ImportError:
+    print("Error: websockets package not installed. Run: pip install websockets")
+    sys.exit(1)
 
 from protocol import NUM_FINGERS
-DISPLAY_POINTS = 500  # max points sent to browser for time-series
-BROADCAST_HZ = 5      # display refresh rate
+from core import TSF85TactileSensor
+from core import create_recorder, BaseRecorder
+
+DISPLAY_POINTS = 500
+BROADCAST_HZ = 5
 
 
 class SensorDataBuffer:
@@ -42,10 +50,37 @@ class SensorDataBuffer:
         self.push_total = [0] * NUM_FINGERS
         self.push_corrupt = [0] * NUM_FINGERS
 
+        self.recorder: Optional[BaseRecorder] = None
+
+    def start_recording(self, filename: str = "recording.csv", keep_baseline: bool = False) -> Optional[str]:
+        """Initialize and start logging via polymorphic recorder (CSV or HDF5)."""
+        with self._lock:
+            self.recorder = create_recorder(filename, keep_baseline=keep_baseline)
+            actual_path = self.recorder.start(self.baseline)
+            if actual_path:
+                print(f"[Web Viewer] Started recording: {actual_path}")
+            return actual_path
+
+    def stop_recording(self):
+        """Stop current recorder and flush data."""
+        with self._lock:
+            if self.recorder and self.recorder.is_recording:
+                count = self.recorder.recorded_count
+                path = self.recorder.filepath
+                self.recorder.stop()
+                print(f"[Web Viewer] Stopped recording. Saved {count} frames to: {path}")
+                self.recorder = None
+
     def push(self, sensor_data):
         with self._lock:
             if sensor_data.fingers[0].timestamp != 0 and self.default_range != 1200.0:
                 self.default_range = 1200.0
+
+            # --- Active Stream Recording (CSV or HDF5) ---
+            if self.recorder and self.recorder.is_recording:
+                self.recorder.write_frame(sensor_data, self.baseline)
+
+            # --- Update UI buffers ---
             for f in range(NUM_FINGERS):
                 finger = sensor_data.fingers[f]
                 st = list(finger.static_tactile)
@@ -63,10 +98,7 @@ class SensorDataBuffer:
             result = []
             for f in range(NUM_FINGERS):
                 raw = self.static_tactile[f]
-                if raw is None:
-                    result.append([0] * 28)
-                    continue
-                if len(raw) != 28:
+                if raw is None or len(raw) != 28:
                     result.append([0] * 28)
                     continue
                 if self.use_baseline:
@@ -91,8 +123,7 @@ class SensorDataBuffer:
     def get_imu_snapshot(self):
         """Return subsampled IMU data."""
         with self._lock:
-            acc = []
-            gyr = []
+            acc, gyr = [], []
             for f in range(NUM_FINGERS):
                 acc.append(_subsample_deque_3axis(self.accelerometer[f], DISPLAY_POINTS))
                 gyr.append(_subsample_deque_3axis(self.gyroscope[f], DISPLAY_POINTS))
@@ -198,29 +229,36 @@ def _fft_magnitudes(real_data):
 
 
 class WebViewer:
-    def __init__(self, monitor, port=8080):
+    def __init__(self, monitor: TSF85TactileSensor, port=8080):
         self.monitor = monitor
         self.port = port
         self.buffer = SensorDataBuffer()
         self.clients = set()
         self.active_tab = "static"
-        self._had_client = False
-
-    def serial_callback(self, sensor_data):
-        try:
-            self.buffer.push(sensor_data)
-        except Exception:
-            traceback.print_exc(file=sys.stderr)
 
     async def websocket_handler(self, websocket):
         self.clients.add(websocket)
-        self._had_client = True
         try:
             async for message in websocket:
                 msg = json.loads(message)
-                if msg.get("type") == "tab_change":
+                if msg.get("type") == "start_recording":
+                    filename = msg.get("filename", "recording.csv")
+                    actual_path = self.buffer.start_recording(filename)
+                    if actual_path:
+                        # Notify browser of actual saved path (e.g. data/recording_2026-08-27_193501123456.csv)
+                        await websocket.send(json.dumps({
+                            "type": "recording_started",
+                            "filename": actual_path
+                        }))
+                elif msg.get("type") == "stop_recording":
+                    self.buffer.stop_recording()
+                    await websocket.send(json.dumps({"type": "recording_stopped"}))
+                elif msg.get("type") == "tab_change":
                     self.active_tab = msg["tab"]
                 elif msg.get("type") == "reset_baseline":
+                    self.monitor.reset_baseline(num_samples=100)
+                    for f in range(NUM_FINGERS):
+                        self.buffer.baseline[f] = list(self.monitor.baseline[f])
                     self.buffer.reset_baseline()
                 elif msg.get("type") == "set_raw_mode":
                     self.buffer.use_baseline = not msg.get("raw", False)
@@ -235,18 +273,10 @@ class WebViewer:
             pass
         finally:
             self.clients.discard(websocket)
-            if self._had_client and not self.clients:
-                # Last client disconnected — give a brief grace period for
-                # page refreshes, then shut down.
-                await asyncio.sleep(2.0)
-                if not self.clients:
-                    print("\nAll clients disconnected. Shutting down...")
-                    os._exit(0)
 
     async def broadcast_loop(self):
         interval = 1.0 / BROADCAST_HZ
         busy = set()  # clients still sending the previous frame
-        last_diag = 0.0
 
         async def _send(client, payload):
             try:
@@ -258,23 +288,6 @@ class WebViewer:
 
         while True:
             try:
-                now = time.monotonic()
-                if now - last_diag >= 5.0:
-                    last_diag = now
-                    b = self.buffer
-                    with b._lock:
-                        dyn_sizes = [len(b.dynamic_tactile[f]) for f in range(NUM_FINGERS)]
-                        acc_sizes = [len(b.accelerometer[f]) for f in range(NUM_FINGERS)]
-                        gyr_sizes = [len(b.gyroscope[f]) for f in range(NUM_FINGERS)]
-                        corrupt = [
-                            f"{b.push_corrupt[f]}/{b.push_total[f]}"
-                            f" ({100*b.push_corrupt[f]/b.push_total[f]:.0f}%)"
-                            if b.push_total[f] else "0/0"
-                            for f in range(NUM_FINGERS)
-                        ]
-                    print(f"[diag] tab={self.active_tab}  clients={len(self.clients)}  "
-                          f"dyn={dyn_sizes}  accel={acc_sizes}  gyro={gyr_sizes}  "
-                          f"corrupt={corrupt}")
                 if self.clients:
                     tab = self.active_tab
                     msg = {"type": "data", "tab": tab}
@@ -295,7 +308,6 @@ class WebViewer:
                         if client not in busy:
                             busy.add(client)
                             asyncio.ensure_future(_send(client, payload))
-                        # else: client is still sending previous frame, drop this one
             except Exception:
                 traceback.print_exc(file=sys.stderr)
             await asyncio.sleep(interval)
@@ -335,22 +347,30 @@ class QuietHTTPHandler(SimpleHTTPRequestHandler):
         pass
 
 
-def run_web_viewer(monitor, port=8080):
+def _serial_reader_loop(monitor: TSF85TactileSensor, buffer: SensorDataBuffer):
+    """Background polling loop pushing data to SensorDataBuffer."""
+    monitor.running = True
+    while monitor.running:
+        for sensor_data in monitor.poll_data():
+            buffer.push(sensor_data)
+
+
+def run_web_viewer(monitor: TSF85TactileSensor, port=8080):
     viewer = WebViewer(monitor, port)
 
-    # Seed buffer baseline from the calibration done in main()
+    # Seed buffer baseline from calibration
     for f in range(NUM_FINGERS):
         viewer.buffer.baseline[f] = list(monitor.baseline[f])
 
     serial_thread = threading.Thread(
-        target=monitor.read_serial_data,
-        args=(viewer.serial_callback,),
+        target=_serial_reader_loop,
+        args=(monitor, viewer.buffer),
         daemon=True
     )
     serial_thread.start()
 
     url = f"http://localhost:{port}"
-    print(f"Web viewer starting...")
+    print("Web viewer starting...")
     print(f"  URL: {url}")
     print("  Press Ctrl+C to stop.\n")
     webbrowser.open(url)
@@ -358,3 +378,29 @@ def run_web_viewer(monitor, port=8080):
     # All threads are daemon — hard exit on Ctrl+C is safe and responsive
     signal.signal(signal.SIGINT, lambda *_: os._exit(0))
     asyncio.run(viewer.run_server())
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Robotiq Tactile Sensor Web Viewer")
+    parser.add_argument('--port', type=int, default=8080, help='Web server port (default: 8080)')
+    args = parser.parse_args()
+
+    sensor_monitor = TSF85TactileSensor()
+    sensor_port = sensor_monitor.find_sensor()
+    if not sensor_port or not sensor_monitor.connect(sensor_port):
+        print("Sensor not found or failed to connect.")
+        sys.exit(1)
+
+    if not sensor_monitor.start_autosend(period_ms=1):
+        sensor_monitor.cleanup()
+        sys.exit(1)
+
+    sensor_monitor.detect_connected_fingers()
+    print("Calibrating baseline for Web Viewer...")
+    sensor_monitor.reset_baseline(num_samples=500)
+
+    try:
+        run_web_viewer(sensor_monitor, port=args.port)
+    finally:
+        sensor_monitor.cleanup()

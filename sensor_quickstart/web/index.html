@@ -11,6 +11,11 @@
     <header>
         <h1>Robotiq Tactile Sensor Viewer</h1>
         <div id="status-bar">
+            <div class="recording-controls">
+                <input type="text" id="csv-filename" placeholder="experiment.csv" value="recording.csv" />
+                <button id="btn-record" class="btn-rec">● Record </button>
+                <span id="rec-status" class="status-indicator">Idle</span>
+            </div>
 
             <span id="connection-status" class="status-disconnected">Disconnected</span>
             <span id="sample-count">Samples: 0</span>

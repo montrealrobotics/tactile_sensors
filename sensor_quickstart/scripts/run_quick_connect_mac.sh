@@ -7,7 +7,8 @@ echo "=========================================="
 echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VENV_DIR="$SCRIPT_DIR/.venvSimpleCheck"
+PARENT_DIR="$(dirname "$SCRIPT_DIR")"
+VENV_DIR="$PARENT_DIR/.venvSimpleCheck"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -62,8 +63,8 @@ install_requirements() {
     echo ""
     echo "Installing requirements..."
     pip install --upgrade pip --quiet
-    if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
-        pip install -r "$SCRIPT_DIR/requirements.txt" --quiet
+    if [ -f "$PARENT_DIR/requirements.txt" ]; then
+        pip install -r "$PARENT_DIR/requirements.txt" --quiet
         echo -e "${GREEN}✓ Requirements installed${NC}"
     else
         echo -e "${YELLOW}Warning: requirements.txt not found${NC}"
@@ -128,7 +129,7 @@ echo "Using Python from: $(command -v python3)"
 echo "Virtual environment: ${VIRTUAL_ENV:-Not in venv}"
 echo ""
 
-cd "$SCRIPT_DIR"
+cd "$PARENT_DIR"
 python3 quick_connect.py "$@"
 
 echo ""

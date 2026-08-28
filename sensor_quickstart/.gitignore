@@ -1,6 +1,7 @@
 # PyInstaller build artifacts
 build/
 dist/
+data/
 # Keep the custom spec file
 !simple_sensor_check.spec
 

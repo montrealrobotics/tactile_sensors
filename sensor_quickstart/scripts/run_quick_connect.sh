@@ -9,6 +9,7 @@ echo ""
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PARENT_DIR="$(dirname "$SCRIPT_DIR")"
+TOP_DIR="$(dirname "$PARENT_DIR")"
 VENV_DIR="$SCRIPT_DIR/.venvSimpleCheck"
 
 # Colors for output
@@ -61,8 +62,8 @@ install_requirements() {
     pip install --upgrade pip --quiet
 
     # Install requirements
-    if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
-        pip install -r "$SCRIPT_DIR/requirements.txt" --quiet
+    if [ -f "$PARENT_DIR/requirements.txt" ]; then
+        pip install -r "$PARENT_DIR/requirements.txt" --quiet
         echo -e "${GREEN}✓ Requirements installed${NC}"
     else
         echo -e "${YELLOW}Warning: requirements.txt not found${NC}"
@@ -71,24 +72,24 @@ install_requirements() {
 
 # Load helper scripts from parent directory
 echo "Loading helper scripts..."
-if [ -f "${PARENT_DIR}/utils/scripts/apply_udev_rule.sh" ]; then
-    source "${PARENT_DIR}/utils/scripts/apply_udev_rule.sh"
+if [ -f "${TOP_DIR}/utils/scripts/apply_udev_rule.sh" ]; then
+    source "${TOP_DIR}/utils/scripts/apply_udev_rule.sh"
     echo -e "${GREEN}✓ Loaded apply_udev_rule.sh${NC}"
 else
     echo -e "${YELLOW}Warning: apply_udev_rule.sh not found, skipping...${NC}"
     apply_udev_rule() { :; }  # No-op function
 fi
 
-if [ -f "${PARENT_DIR}/utils/scripts/set_sensor_permissions.sh" ]; then
-    source "${PARENT_DIR}/utils/scripts/set_sensor_permissions.sh"
+if [ -f "${TOP_DIR}/utils/scripts/set_sensor_permissions.sh" ]; then
+    source "${TOP_DIR}/utils/scripts/set_sensor_permissions.sh"
     echo -e "${GREEN}✓ Loaded set_sensor_permissions.sh${NC}"
 else
     echo -e "${YELLOW}Warning: set_sensor_permissions.sh not found, skipping...${NC}"
     set_sensor_permissions() { :; }  # No-op function
 fi
 
-if [ -f "${PARENT_DIR}/utils/scripts/find_sensor_devices.sh" ]; then
-    source "${PARENT_DIR}/utils/scripts/find_sensor_devices.sh"
+if [ -f "${TOP_DIR}/utils/scripts/find_sensor_devices.sh" ]; then
+    source "${TOP_DIR}/utils/scripts/find_sensor_devices.sh"
     echo -e "${GREEN}✓ Loaded find_sensor_devices.sh${NC}"
 else
     echo -e "${YELLOW}Warning: find_sensor_devices.sh not found, skipping...${NC}"
@@ -163,8 +164,8 @@ echo "Virtual environment: ${VIRTUAL_ENV:-Not in venv}"
 echo ""
 
 # Step 7: Run the sensor checker
-cd "$SCRIPT_DIR"
-python3 quick_connect.py "$@"
+cd "$PARENT_DIR"
+python3 sensor_monitor.py "$@"
 
 # Cleanup message
 echo ""

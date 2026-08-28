@@ -23,6 +23,7 @@ const IMU_COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c'];
 let ws = null;
 let activeTab = 'static';
 let frameCount = 0;
+let isRecording = false;
 
 // --- WebSocket ---
 
@@ -51,7 +52,7 @@ function connect() {
     };
 }
 
-// --- Data Handling (just render server snapshots directly) ---
+// --- Data Handling ---
 
 function handleData(msg) {
     frameCount++;
@@ -233,6 +234,44 @@ document.getElementById('adaptive-range').addEventListener('change', (e) => {
 });
 
 document.getElementById('reset-imu-axes')?.addEventListener('click', resetIMUAxes);
+
+const btnRecord = document.getElementById('btn-record');
+const inputFilename = document.getElementById('csv-filename');
+const recStatus = document.getElementById('rec-status');
+
+if (btnRecord) {
+    btnRecord.addEventListener('click', () => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+        isRecording = !isRecording;
+
+        if (isRecording) {
+            const filename = inputFilename?.value.trim() || 'recording.csv';
+            ws.send(JSON.stringify({
+                type: 'start_recording',
+                filename: filename
+            }));
+
+            btnRecord.textContent = '■ Stop Recording';
+            btnRecord.classList.add('recording-active');
+            if (recStatus) {
+                recStatus.textContent = 'Recording...';
+                recStatus.style.color = '#ef4444';
+            }
+        } else {
+            ws.send(JSON.stringify({
+                type: 'stop_recording'
+            }));
+
+            btnRecord.textContent = '● Record ';
+            btnRecord.classList.remove('recording-active');
+            if (recStatus) {
+                recStatus.textContent = 'Saved';
+                recStatus.style.color = '#22c55e';
+            }
+        }
+    });
+}
 
 // --- Init ---
 
