@@ -10,7 +10,6 @@ import shutil
 import argparse
 from typing import Optional
 from core import TSF85TactileSensor, NUM_FINGERS
-from core import create_recorder, BaseRecorder
 
 REFRESH_RATE_WINDOW = 1.0
 
@@ -57,10 +56,6 @@ class TerminalRecorder:
         self.monitor = monitor
         self.keep_baseline = keep_baseline
         self.requested_filename = output_filename
-        self.recorder: Optional[BaseRecorder] = None
-
-        if output_filename:
-            self.recorder = create_recorder(output_filename, keep_baseline=keep_baseline)
 
         # Stats
         self.total_packets = 0
@@ -101,8 +96,6 @@ class TerminalRecorder:
             self.last_stats_time = current_time
 
     def render(self, data):
-        if self.recorder and self.recorder.is_recording:
-            self.recorder.write_frame(data, self.monitor.baseline)
 
         lines = ["=" * 80]
         lines.append(f"Robotiq Tactile Sensor Monitor (fw: {self.monitor.firmware_version})".center(80))
@@ -110,14 +103,16 @@ class TerminalRecorder:
         lines.append(f"Data Rate: {self.data_rate_kbs:.3f} KB/s  |  "
                      f"Refresh Rate: {self.refresh_rate_hz:.1f} Hz  |  "
                      f"Total Packets: {self.total_packets}")
-
-        if self.recorder:
-            active_path = self.recorder.filepath or self.requested_filename
-            rec_str = f"RECORDING ({self.recorder.recorded_count} samples)" if self.recorder.is_recording else "STANDBY (Press 's' to record)"
-            lines.append(f"Logging: {active_path} | Status: {rec_str}")
-            lines.append("Controls: [s] Start Rec & Baseline | [c] Stop Rec | [q] Quit")
+        rec = self.monitor.recorder
+        if rec and rec.is_recording:
+            rec_str = f"RECORDING ({rec.recorded_count} samples)"
+            active_path = rec.filepath
         else:
-            lines.append("Controls: [q] Quit")
+            rec_str = "STANDBY"
+            active_path = self.requested_filename
+
+        lines.append(f"Logging: {active_path} | Status: {rec_str}")
+        lines.append("Controls: [s] Start Rec & Baseline | [c] Stop Rec | [q] Quit")
 
         for finger_id in range(NUM_FINGERS):
             lines.append(f"FINGER {finger_id}")
@@ -174,11 +169,11 @@ class TerminalRecorder:
             while self.monitor.running:
                 if kb_ctx:
                     key = _kbhit_check(kb_ctx)
-                    if key == 's' and self.recorder and not self.recorder.is_recording:
+                    if key == 's' and (not self.monitor.recorder or not self.monitor.recorder.is_recording):
                         self.monitor.reset_baseline(num_samples=500)
-                        self.recorder.start(self.monitor.baseline)
-                    elif key == 'c' and self.recorder and self.recorder.is_recording:
-                        self.recorder.stop()
+                        self.monitor.start_recording(self.requested_filename, keep_baseline=self.keep_baseline)
+                    elif key == 'c' and self.monitor.recorder and self.monitor.recorder.is_recording:
+                        self.monitor.stop_recording()
                     elif key == 'q':
                         break
 
@@ -191,8 +186,7 @@ class TerminalRecorder:
             pass
         finally:
             _kbhit_cleanup(kb_ctx)
-            if self.recorder and self.recorder.is_recording:
-                self.recorder.stop()
+            self.monitor.stop_recording()
             if self._cursor_hidden:
                 sys.stdout.write("\033[?25h")
             if self._alt_screen_enabled:

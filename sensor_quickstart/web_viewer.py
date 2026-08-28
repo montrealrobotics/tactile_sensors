@@ -27,7 +27,6 @@ except ImportError:
 
 from protocol import NUM_FINGERS
 from core import TSF85TactileSensor
-from core import create_recorder, BaseRecorder
 
 DISPLAY_POINTS = 500
 BROADCAST_HZ = 5
@@ -50,35 +49,10 @@ class SensorDataBuffer:
         self.push_total = [0] * NUM_FINGERS
         self.push_corrupt = [0] * NUM_FINGERS
 
-        self.recorder: Optional[BaseRecorder] = None
-
-    def start_recording(self, filename: str = "recording.csv", keep_baseline: bool = False) -> Optional[str]:
-        """Initialize and start logging via polymorphic recorder (CSV or HDF5)."""
-        with self._lock:
-            self.recorder = create_recorder(filename, keep_baseline=keep_baseline)
-            actual_path = self.recorder.start(self.baseline)
-            if actual_path:
-                print(f"[Web Viewer] Started recording: {actual_path}")
-            return actual_path
-
-    def stop_recording(self):
-        """Stop current recorder and flush data."""
-        with self._lock:
-            if self.recorder and self.recorder.is_recording:
-                count = self.recorder.recorded_count
-                path = self.recorder.filepath
-                self.recorder.stop()
-                print(f"[Web Viewer] Stopped recording. Saved {count} frames to: {path}")
-                self.recorder = None
-
     def push(self, sensor_data):
         with self._lock:
             if sensor_data.fingers[0].timestamp != 0 and self.default_range != 1200.0:
                 self.default_range = 1200.0
-
-            # --- Active Stream Recording (CSV or HDF5) ---
-            if self.recorder and self.recorder.is_recording:
-                self.recorder.write_frame(sensor_data, self.baseline)
 
             # --- Update UI buffers ---
             for f in range(NUM_FINGERS):
@@ -243,15 +217,14 @@ class WebViewer:
                 msg = json.loads(message)
                 if msg.get("type") == "start_recording":
                     filename = msg.get("filename", "recording.csv")
-                    actual_path = self.buffer.start_recording(filename)
+                    actual_path = self.monitor.start_recording(filename)
                     if actual_path:
-                        # Notify browser of actual saved path (e.g. data/recording_2026-08-27_193501123456.csv)
                         await websocket.send(json.dumps({
                             "type": "recording_started",
                             "filename": actual_path
                         }))
                 elif msg.get("type") == "stop_recording":
-                    self.buffer.stop_recording()
+                    self.monitor.stop_recording()
                     await websocket.send(json.dumps({"type": "recording_stopped"}))
                 elif msg.get("type") == "tab_change":
                     self.active_tab = msg["tab"]

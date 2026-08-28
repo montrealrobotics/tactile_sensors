@@ -144,6 +144,9 @@ class TSF85TactileSensor:
                     sensor_data = self.parser.get_sensor_data()
                     for f in sensor_data.fingers:
                         f.new_data_available = False
+                    if self.recorder and self.recorder.is_recording:
+                        self.recorder.write_frame(sensor_data, self.baseline)
+
                     yield sensor_data
         else:
             self._sleep_os()
