@@ -125,9 +125,12 @@ class TerminalRecorder:
             # Static Tactile (7x4 grid)
             lines.append("  Static Tactile (7 rows × 4 columns):")
             # Subtract baseline from static tactile (element-wise)
-            baseline_corrected = [s - b for s, b in zip(finger.static_tactile, self.monitor.baseline[finger_id])]
+            if not self.keep_baseline:
+                static_tactiles = [s - b for s, b in zip(finger.static_tactile, self.monitor.baseline[finger_id])]
+            else:
+                static_tactiles = finger.static_tactile
             for r in range(7):
-                row_vals = baseline_corrected[r*4:(r+1)*4]
+                row_vals = static_tactiles[r*4:(r+1)*4]
                 lines.append("    " + " ".join(f"{v:5d}" for v in row_vals))
             lines.append("")
 
