@@ -2,15 +2,15 @@
 set -euo pipefail
 
 echo "=========================================="
-echo "Tactile Sensor Quick Connection"
+echo "Robotiq Tactile Sensor Environment Setup"
 echo "=========================================="
 echo ""
 
-# Get the directory where this script is located
+# Get directory paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PARENT_DIR="$(dirname "$SCRIPT_DIR")"
-TOP_DIR="$(dirname "$PARENT_DIR")"
-VENV_DIR="$SCRIPT_DIR/.venvSimpleCheck"
+TOP_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PYTHON_DIR="$TOP_DIR/python"
+VENV_DIR="$PYTHON_DIR/.venv"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -42,42 +42,47 @@ setup_venv() {
     fi
 
     echo "Activating virtual environment..."
+    # Disable nounset temporarily while sourcing activate
+    set +u
     if ! source "$VENV_DIR/bin/activate" 2>/dev/null; then
         echo -e "${YELLOW}Warning: Failed to activate virtual environment, recreating...${NC}"
         rm -rf "$VENV_DIR"
         python3 -m venv "$VENV_DIR"
         source "$VENV_DIR/bin/activate"
     fi
+    set -u
+
     echo -e "${GREEN}✓ Virtual environment activated${NC}"
     echo "  Python location: $(which python3)"
-    echo "  Python version: $(python3 --version)"
+    echo "  Python version:  $(python3 --version)"
 }
 
-# Function to install requirements
-install_requirements() {
+# Function to install python package
+install_package() {
     echo ""
-    echo "Installing requirements..."
+    echo "Installing requirements and Python package..."
 
-    # Upgrade pip first
     pip install --upgrade pip --quiet
 
-    # Install requirements
-    if [ -f "$PARENT_DIR/requirements.txt" ]; then
-        pip install -r "$PARENT_DIR/requirements.txt" --quiet
-        echo -e "${GREEN}✓ Requirements installed${NC}"
-    else
-        echo -e "${YELLOW}Warning: requirements.txt not found${NC}"
+    if [ -f "$PYTHON_DIR/requirements.txt" ]; then
+        pip install -r "$PYTHON_DIR/requirements.txt" --quiet
+        echo -e "${GREEN}✓ Requirements installed from requirements.txt${NC}"
+    fi
+
+    if [ -f "$PYTHON_DIR/setup.py" ]; then
+        pip install -e "$PYTHON_DIR" --no-deps --quiet
+        echo -e "${GREEN}✓ Installed robotiq_tactile package (-e)${NC}"
     fi
 }
 
-# Load helper scripts from parent directory
+# Load helper scripts
 echo "Loading helper scripts..."
 if [ -f "${TOP_DIR}/utils/scripts/apply_udev_rule.sh" ]; then
     source "${TOP_DIR}/utils/scripts/apply_udev_rule.sh"
     echo -e "${GREEN}✓ Loaded apply_udev_rule.sh${NC}"
 else
     echo -e "${YELLOW}Warning: apply_udev_rule.sh not found, skipping...${NC}"
-    apply_udev_rule() { :; }  # No-op function
+    apply_udev_rule() { :; }
 fi
 
 if [ -f "${TOP_DIR}/utils/scripts/set_sensor_permissions.sh" ]; then
@@ -85,7 +90,7 @@ if [ -f "${TOP_DIR}/utils/scripts/set_sensor_permissions.sh" ]; then
     echo -e "${GREEN}✓ Loaded set_sensor_permissions.sh${NC}"
 else
     echo -e "${YELLOW}Warning: set_sensor_permissions.sh not found, skipping...${NC}"
-    set_sensor_permissions() { :; }  # No-op function
+    set_sensor_permissions() { :; }
 fi
 
 if [ -f "${TOP_DIR}/utils/scripts/find_sensor_devices.sh" ]; then
@@ -93,7 +98,7 @@ if [ -f "${TOP_DIR}/utils/scripts/find_sensor_devices.sh" ]; then
     echo -e "${GREEN}✓ Loaded find_sensor_devices.sh${NC}"
 else
     echo -e "${YELLOW}Warning: find_sensor_devices.sh not found, skipping...${NC}"
-    find_sensor_devices() { echo ""; }  # Return empty
+    find_sensor_devices() { echo ""; }
 fi
 
 echo ""
@@ -107,20 +112,20 @@ check_venv_package
 # Step 2: Setup virtual environment
 setup_venv
 
-# Step 3: Install requirements
-install_requirements
+# Step 3: Install python package
+install_package
 
 echo ""
 echo "=========================================="
 echo "Configuring Sensor Permissions"
 echo "=========================================="
 
-# Step 4: Apply udev rules -> handled by udev rules?
+# Step 4: Apply udev rules
 echo ""
 echo "[1/3] Applying udev rules..."
 apply_udev_rule
 
-# # Step 5: Set sensor permissions
+# Step 5: Set sensor permissions
 echo ""
 echo "[2/3] Setting sensor permissions..."
 set_sensor_permissions
@@ -153,3 +158,10 @@ else
         echo "  - $dev"
     done
 fi
+
+echo ""
+echo "=========================================="
+echo "Setup Complete!"
+echo "=========================================="
+echo "To activate your environment, run:"
+echo -e "${GREEN}  source $VENV_DIR/bin/activate${NC}"

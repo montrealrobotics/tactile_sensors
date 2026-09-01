@@ -12,13 +12,13 @@ import select
 from collections import defaultdict
 from typing import Dict, Tuple, List, Optional
 
-from protocol import (
+from robotiq_tactile_sensor.protocol import (
     UsbPacketParser, SENSOR_TYPE_STATIC_TACTILE, SENSOR_TYPE_DYNAMIC_TACTILE,
     SENSOR_TYPE_ACCELEROMETER, SENSOR_TYPE_GYROSCOPE, SENSOR_TYPE_TEMPERATURE,
     SENSOR_TYPE_TIMESTAMP, STATIC_TACTILE_SIZE, DYNAMIC_TACTILE_SIZE, IMU_SIZE,
     USB_PACKET_HEADER_SIZE
 )
-from core import TSF85TactileSensor, NUM_FINGERS, REFRESH_RATE_WINDOW
+from robotiq_tactile_sensor.sensor import TSF85TactileSensor, NUM_FINGERS, REFRESH_RATE_WINDOW
 
 FIELD_LABEL = {
     SENSOR_TYPE_STATIC_TACTILE:  "Static Tactile",

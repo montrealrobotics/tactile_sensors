@@ -17,7 +17,7 @@ except ImportError:
     print("Please install with: pip install pyserial")
     sys.exit(1)
 
-from protocol import UsbPacketParser
+from .protocol import UsbPacketParser
 from .recorder import create_recorder, BaseRecorder
 
 # Serial port configuration

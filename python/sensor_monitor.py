@@ -9,7 +9,7 @@ import time
 import shutil
 import argparse
 from typing import Optional
-from core import TSF85TactileSensor, NUM_FINGERS
+from robotiq_tactile_sensor import TSF85TactileSensor, NUM_FINGERS
 
 REFRESH_RATE_WINDOW = 1.0
 

@@ -25,8 +25,8 @@ except ImportError:
     print("Error: websockets package not installed. Run: pip install websockets")
     sys.exit(1)
 
-from protocol import NUM_FINGERS
-from core import TSF85TactileSensor
+from robotiq_tactile_sensor.protocol import NUM_FINGERS
+from robotiq_tactile_sensor import TSF85TactileSensor
 
 DISPLAY_POINTS = 500
 BROADCAST_HZ = 5
