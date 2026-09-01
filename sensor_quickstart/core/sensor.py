@@ -172,7 +172,6 @@ class TSF85TactileSensor:
         timeout = 10.0
 
         while samples_collected < num_samples:
-            # Check timeout
             if time.time() - start_time > timeout:
                 return False
 
@@ -195,7 +194,7 @@ class TSF85TactileSensor:
         self.recorder = create_recorder(filepath, keep_baseline=keep_baseline)
         actual_path = self.recorder.start(self.baseline)
         if actual_path:
-            print(f"[SensorMonitor] Started recording to: {actual_path}")
+            print(f"[TactileSensor] Started recording to: {actual_path}")
         return actual_path
 
     def stop_recording(self):
@@ -203,7 +202,7 @@ class TSF85TactileSensor:
             count = self.recorder.recorded_count
             path = self.recorder.filepath
             self.recorder.stop()
-            print(f"[SensorMonitor] Saved {count} frames to {path}")
+            print(f"[TactileSensor] Saved {count} frames to {path}")
 
     def _sleep_os(self):
         try:

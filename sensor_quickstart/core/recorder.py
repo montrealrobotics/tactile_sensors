@@ -68,7 +68,8 @@ class CSVRecorder(BaseRecorder):
             self.writer = csv.writer(self.file, delimiter=';')
 
             header = ['Time(ms)']
-            for f_id in range(NUM_FINGERS): header.append(f'D0_{f_id}')
+            for f_id in range(NUM_FINGERS):
+                header.extend([f'finger_ts_{f_id}', f'D0_{f_id}'])
             for f_id in range(NUM_FINGERS):
                 for t_id in range(28): header.append(f'S{t_id}_{f_id}')
             for f_id in range(NUM_FINGERS): header.extend([f'Ax{f_id}', f'Ay{f_id}', f'Az{f_id}'])
@@ -97,7 +98,7 @@ class CSVRecorder(BaseRecorder):
 
         row = [int(time.time() * 1000)]
         for f in range(NUM_FINGERS):
-            row.append(sensor_data.fingers[f].dynamic_tactile)
+            row.extend([sensor_data.fingers[f].timestamp, sensor_data.fingers[f].dynamic_tactile])
         for f in range(NUM_FINGERS):
             finger = sensor_data.fingers[f]
             if not self.keep_baseline:
@@ -141,6 +142,9 @@ class HDF5Recorder(BaseRecorder):
             self.timestamps = self.file.create_dataset(
                 "timestamp", shape=(0,), maxshape=(None,), dtype="int64", chunks=(1000,)
             )
+            self.tactile_ts = self.file.create_dataset(
+                "tactile_timestamp", shape=(0, NUM_FINGERS), maxshape=(None, NUM_FINGERS), dtype="int64", chunks=(1000, NUM_FINGERS)
+            )
             self.static_tactile = self.file.create_dataset(
                 "static_tactile", shape=(0, NUM_FINGERS, 7, 4), maxshape=(None, NUM_FINGERS, 7, 4), dtype="int16", chunks=(1000, NUM_FINGERS, 7, 4)
             )
@@ -169,11 +173,13 @@ class HDF5Recorder(BaseRecorder):
         idx = self.timestamps.shape[0]
 
         self.timestamps.resize(idx + 1, axis=0)
+        self.tactile_ts.resize(idx + 1, axis=0)
         self.static_tactile.resize(idx + 1, axis=0)
         self.dynamic_tactile.resize(idx + 1, axis=0)
         self.imu_accel.resize(idx + 1, axis=0)
         self.imu_gyro.resize(idx + 1, axis=0)
 
+        tactile_ts_frame = np.zeros((NUM_FINGERS,), dtype=np.int64)
         static_frame = np.zeros((NUM_FINGERS, 7, 4), dtype=np.int16)
         dynamic_frame = np.zeros((NUM_FINGERS,), dtype=np.int32)
         accel_frame = np.zeros((NUM_FINGERS, 3), dtype=np.int16)
@@ -181,6 +187,7 @@ class HDF5Recorder(BaseRecorder):
 
         for f in range(NUM_FINGERS):
             finger = sensor_data.fingers[f]
+            tactile_ts_frame[f] = finger.timestamp
             dynamic_frame[f] = finger.dynamic_tactile
             accel_frame[f] = finger.accelerometer
             gyro_frame[f] = finger.gyroscope
@@ -192,6 +199,7 @@ class HDF5Recorder(BaseRecorder):
                 static_frame[f] = np.array(finger.static_tactile, dtype=np.int16).reshape(7, 4)
 
         self.timestamps[idx] = int(time.time() * 1000)
+        self.tactile_ts[idx] = tactile_ts_frame
         self.static_tactile[idx] = static_frame
         self.dynamic_tactile[idx] = dynamic_frame
         self.imu_accel[idx] = accel_frame
@@ -211,3 +219,4 @@ def create_recorder(filepath: str, keep_baseline: bool = False) -> BaseRecorder:
     if filepath.endswith(".h5") or filepath.endswith(".hdf5"):
         return HDF5Recorder(filepath, keep_baseline)
     return CSVRecorder(filepath, keep_baseline)
+
