@@ -47,6 +47,7 @@ To install directly into your own existing Python environment:
 
 ```
 cd python
+pip install -r requirements.txt
 pip install -e .
 ```
 
